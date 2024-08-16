@@ -26,7 +26,7 @@ fn parse_file(
     let source = String::from_utf8(source)?; // and_then won't work
     store.insert(
         path.to_owned(),
-        AssemblyFile::parse::<syntax::NASM>(&source)?
+        AssemblyFile::parse::<syntax::NASM>(path, &source)?
     );
     Ok(())
 }

@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use crate::assembly_file::AssemblyFile;
+use crate::{assembly_file::AssemblyFile, documentation::Documentation};
 
 #[derive(Default)]
 pub struct AssemblyProject {
@@ -35,5 +35,9 @@ impl AssemblyProject {
             }
         }
         self
+    }
+
+    fn generate_docs(&self) -> Vec<(PathBuf, Documentation)> {
+        todo!()
     }
 }

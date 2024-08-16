@@ -2,8 +2,8 @@
 
 use std::{
     error,
-    fmt::{self, Display},
-    path::PathBuf
+    fmt::{self, Debug, Display},
+    path::{Path, PathBuf}
 };
 
 use logos::{Logos, Span};
@@ -16,7 +16,6 @@ use super::Syntax;
 
 /// Grammar for NASM syntax.
 #[derive(Logos, Debug, PartialEq, Eq, Clone, Copy)]
-#[logos(skip r"[ \t\f]+")]
 pub enum NASMTokenType {
     #[token("bits")]
     Bits,
@@ -39,11 +38,14 @@ pub enum NASMTokenType {
     #[token("%include")]
     Include,
 
+    #[token("%define")]
+    Define,
+
     #[token("%macro")]
     Macro,
 
     // TODO: finish this
-    #[regex("mov|add|jmp|push|pop|call|ret|sub|mul|div|inc|dec|and|or|xor|not|shl|shr|cmp|test|db|dd|align|equ|lea|jne|je|imul")]
+    #[regex("mov|add|jmp|push|pop|call|ret|sub|mul|div|inc|dec|and|or|xor|not|shl|shr|cmp|test|db|dd|align|equ|lea|jne|je|imul|syscall|jz|jnz")]
     Mnemonic,
 
     #[token("%endmacro")]
@@ -117,13 +119,36 @@ pub enum NASMTokenType {
     RightParen,
 
     #[token("\n")]
-    Newline
+    Newline,
+
+    #[regex(r"[ \t\f]+")]
+    Whitespace,
+
+    EOF
+}
+
+#[derive(Clone, Debug)]
+pub struct SourceLocation<P: AsRef<Path>> {
+    pub file: P,
+    pub line: usize,
+    pub col: usize
+}
+
+impl<'a> From<SourceLocation<&'a Path>> for SourceLocation<PathBuf> {
+    fn from(value: SourceLocation<&'a Path>) -> Self {
+        SourceLocation {
+            file: value.file.to_path_buf(),
+            line: value.line,
+            col: value.col
+        }
+    }
 }
 
 pub struct NASMToken<'src> {
     pub ty: NASMTokenType,
     pub value: &'src str,
-    pub span: Span
+    pub span: Span,
+    pub loc: SourceLocation<&'src Path>
 }
 
 impl<'src> Clone for NASMToken<'src> {
@@ -131,7 +156,8 @@ impl<'src> Clone for NASMToken<'src> {
         NASMToken {
             ty: self.ty,
             value: self.value,
-            span: self.span.clone()
+            span: self.span.clone(),
+            loc: self.loc.clone()
         }
     }
 }
@@ -164,10 +190,12 @@ impl Display for NASMParseErrorType {
     }
 }
 
+type ParserTrace = Vec<(String, SourceLocation<PathBuf>)>;
+
 #[derive(Debug)]
 pub struct NASMParseError {
     ty: NASMParseErrorType,
-    trace: Vec<(String, Span)>
+    trace: ParserTrace
 }
 
 impl Display for NASMParseError {
@@ -176,11 +204,18 @@ impl Display for NASMParseError {
         if !self.trace.is_empty() {
             write!(f, ": ")?;
         }
-        for (i, (rule, span)) in self.trace.iter().enumerate() {
+        for (i, (rule, loc)) in self.trace.iter().enumerate() {
             if i > 0 {
                 write!(f, " > ")?;
             }
-            write!(f, "{}({}..{})", rule, span.start, span.end)?;
+            write!(
+                f,
+                "{}({}:{}:{})",
+                rule,
+                loc.file.file_name().unwrap().to_string_lossy(),
+                loc.line,
+                loc.col
+            )?;
         }
         Ok(())
     }
@@ -193,9 +228,10 @@ type RuleResult = Result<(), NASMParseError>;
 pub struct NASM<'src> {
     pos: usize,
     tokens: Vec<NASMToken<'src>>,
+    eof_token: NASMToken<'src>,
     asm: AssemblyFile,
     current_section: AssemblySection,
-    rule_stack: Vec<(String, Span)>
+    rule_stack: ParserTrace
 }
 
 macro_rules! rules {
@@ -209,7 +245,7 @@ macro_rules! rules {
                         return Err($self.error(NASMParseErrorType::UnexpectedEOF));
                     }
                     $self.rule_stack.push(
-                        (stringify!($name).to_string(), $self.current().span.clone())
+                        (stringify!($name).to_string(), $self.current().loc.into())
                     );
                     $body?;
                     $self.rule_stack.pop();
@@ -249,7 +285,10 @@ impl<'src> NASM<'src> {
     }
 
     fn skip(&mut self) {
-        while !self.is_eof() && self.current().ty == NASMTokenType::Newline {
+        while !self.is_eof()
+            && (self.current().ty == NASMTokenType::Newline
+                || self.current().ty == NASMTokenType::Whitespace)
+        {
             self.advance()
         }
     }
@@ -259,15 +298,12 @@ impl<'src> NASM<'src> {
         if self.is_eof() {
             trace.push((
                 "end-of-file".into(),
-                Span {
-                    start: self.tokens.len(),
-                    end: self.tokens.len()
-                }
+                self.eof_token.loc.clone().into()
             ));
         } else {
             trace.push((
                 format!("{:?}", self.current().ty),
-                self.current().span.clone()
+                self.current().loc.clone().into()
             ));
         }
         NASMParseError { ty, trace }
@@ -397,39 +433,83 @@ impl<'src> NASM<'src> {
             self.current_section().push(AssemblyItem::MacroCall(name, Vec::new()));
             Ok(())
         }
+
+        rule define(&mut self) -> RuleResult {
+            self.expect(NASMTokenType::Define)?;
+            let name = self.expect(NASMTokenType::Symbol)?.value.to_string();
+            while !self.is_eof() && self.current().ty != NASMTokenType::Newline {
+                self.advance();
+            }
+            self.expect_newline()?;
+            self.asm.defines.push(name);
+            Ok(())
+        }
     }
 }
 
 impl<'src> Syntax<'src> for NASM<'src> {
     type Error = NASMParseError;
 
-    fn new_parser(source: &'src str) -> Result<Self, Self::Error> {
+    fn new_parser(
+        file: &'src Path, source: &'src str
+    ) -> Result<Self, Self::Error> {
         let mut lexer = NASMTokenType::lexer(source);
         let mut tokens = Vec::new();
-        while let Some(token) = lexer.next() {
-            tokens.push(NASMToken {
-                ty: token.map_err(|_| Self::Error {
-                    ty: NASMParseErrorType::InvalidInput,
-                    trace: vec![("lex".into(), lexer.span())]
-                })?,
-                value: lexer.slice(),
-                span: lexer.span()
-            });
+        let mut line = 1;
+        let mut col = 1;
+        while let Some(ty) = lexer.next() {
+            let ty = ty.map_err(|_| Self::Error {
+                ty: NASMParseErrorType::InvalidInput,
+                trace: vec![(
+                    "lex".into(),
+                    SourceLocation {
+                        file: file.to_path_buf(),
+                        line,
+                        col
+                    }
+                )]
+            })?;
+
+            if ty != NASMTokenType::Whitespace {
+                tokens.push(NASMToken {
+                    ty,
+                    value: lexer.slice(),
+                    span: lexer.span(),
+                    loc: SourceLocation { file, line, col }
+                });
+            }
+
+            if ty == NASMTokenType::Newline {
+                line += 1;
+                col = 1;
+            } else {
+                col += lexer.slice().len();
+            }
         }
+        let eof_token = NASMToken {
+            ty: NASMTokenType::EOF,
+            value: "",
+            span: Span {
+                start: source.len(),
+                end: source.len()
+            },
+            loc: SourceLocation { file, line, col }
+        };
 
         Ok(Self {
             pos: 0,
             tokens,
+            eof_token,
             asm: AssemblyFile::default(),
             current_section: AssemblySection::Text,
-            rule_stack: Vec::new()
+            rule_stack: ParserTrace::new()
         })
     }
 
     fn parse(mut self) -> Result<AssemblyFile, Self::Error> {
         if !self.is_eof() {
             self.rule_stack
-                .push(("parse".to_string(), self.current().span.clone()));
+                .push(("parse".to_string(), self.current().loc.clone().into()));
         }
         self.skip();
         while !self.is_eof() {
@@ -450,6 +530,7 @@ impl<'src> Syntax<'src> for NASM<'src> {
                     Ok(())
                 }
                 NASMTokenType::Include => self.rule_include(),
+                NASMTokenType::Define => self.rule_define(),
                 _ => Err(self.error(NASMParseErrorType::InvalidSyntax))
             }?;
             self.skip();

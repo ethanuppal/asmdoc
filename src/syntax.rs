@@ -2,7 +2,8 @@
 
 use std::{
     error,
-    fmt::{Debug, Display}
+    fmt::{Debug, Display},
+    path::Path
 };
 
 use crate::assembly_file::AssemblyFile;
@@ -15,7 +16,9 @@ where
     Self: Sized {
     type Error: Display + Debug + error::Error;
 
-    fn new_parser(source: &'src str) -> Result<Self, Self::Error>;
+    fn new_parser(
+        file: &'src Path, source: &'src str
+    ) -> Result<Self, Self::Error>;
 
     fn parse(self) -> Result<AssemblyFile, Self::Error>;
 }

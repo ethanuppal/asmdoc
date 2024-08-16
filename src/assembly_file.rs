@@ -1,6 +1,9 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf}
+};
 
 use serde::Serialize;
 
@@ -36,6 +39,7 @@ pub struct AssemblyFile {
     pub globals: Vec<String>,
     pub externs: Vec<String>,
     pub macros: Vec<AssemblyMacro>,
+    pub defines: Vec<String>,
     pub sections: HashMap<AssemblySection, Vec<AssemblyItem>>
 }
 
@@ -47,6 +51,7 @@ impl Default for AssemblyFile {
             globals: Vec::new(),
             externs: Vec::new(),
             macros: Vec::new(),
+            defines: Vec::new(),
             sections: HashMap::new()
         }
     }
@@ -54,8 +59,8 @@ impl Default for AssemblyFile {
 
 impl AssemblyFile {
     pub fn parse<'src, S: Syntax<'src>>(
-        source: &'src str
+        file: &'src Path, source: &'src str
     ) -> Result<Self, S::Error> {
-        S::new_parser(source)?.parse()
+        S::new_parser(file, source)?.parse()
     }
 }
