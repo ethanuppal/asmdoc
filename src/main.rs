@@ -56,7 +56,7 @@ fn main() -> anyhow::Result<()> {
     // }
     // println!("{}", toml::to_string_pretty(&output_toml).unwrap());
 
-    let project = AssemblyProject::from(files);
+    let project = AssemblyProject::build_from(files);
 
     Ok(())
 }
