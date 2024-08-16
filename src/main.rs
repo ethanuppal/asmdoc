@@ -8,7 +8,7 @@ use std::{
 
 use asmdoc::{
     assembly_file::AssemblyFile, assembly_project::AssemblyProject, cli::CLI,
-    syntax
+    docs::Markdown, syntax
 };
 use walkdir::WalkDir;
 
@@ -33,6 +33,10 @@ fn parse_file(
 
 fn main() -> anyhow::Result<()> {
     let args = CLI::parse();
+    assert!(
+        args.out_dir.is_dir() || !args.out_dir.exists(),
+        "argument passed '-o' was not a directory"
+    );
 
     let mut files = HashMap::new();
     for path in &args.paths {
@@ -57,6 +61,21 @@ fn main() -> anyhow::Result<()> {
     // println!("{}", toml::to_string_pretty(&output_toml).unwrap());
 
     let project = AssemblyProject::build_from(files);
+    let docs = project.generate_docs();
+    if fs::read_dir(&args.out_dir).is_err() {
+        fs::create_dir(&args.out_dir)?;
+    }
+    let mut file_map = HashMap::new();
+    for (file, _) in &docs {
+        let output_relative_path =
+            PathBuf::from(file.with_extension("md").file_name().unwrap());
+        file_map.insert(file.clone(), output_relative_path);
+    }
+    for (file, docs) in &docs {
+        let mut output_path = PathBuf::from(&args.out_dir);
+        output_path.push(file_map.get(file).unwrap());
+        fs::write(output_path, docs.to::<Markdown>(&file_map))?;
+    }
 
     Ok(())
 }

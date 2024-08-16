@@ -1,7 +1,8 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
+    fmt::{self, Display},
     path::{Path, PathBuf}
 };
 
@@ -15,6 +16,18 @@ pub enum AssemblySection {
     Data,
     BSS,
     ROData
+}
+
+impl Display for AssemblySection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AssemblySection::Text => "text",
+            AssemblySection::Data => "data",
+            AssemblySection::BSS => "bss",
+            AssemblySection::ROData => "read-only data"
+        }
+        .fmt(f)
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -36,7 +49,7 @@ pub struct AssemblyMacro {
 pub struct AssemblyFile {
     pub bits: usize,
     pub includes: Vec<PathBuf>,
-    pub globals: Vec<String>,
+    pub globals: HashSet<String>,
     pub externs: Vec<String>,
     pub macros: Vec<AssemblyMacro>,
     pub defines: Vec<String>,
@@ -48,7 +61,7 @@ impl Default for AssemblyFile {
         Self {
             bits: 64,
             includes: Vec::new(),
-            globals: Vec::new(),
+            globals: HashSet::new(),
             externs: Vec::new(),
             macros: Vec::new(),
             defines: Vec::new(),

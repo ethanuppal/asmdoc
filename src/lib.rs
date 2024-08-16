@@ -3,5 +3,5 @@
 pub mod assembly_file;
 pub mod assembly_project;
 pub mod cli;
-pub mod documentation;
+pub mod docs;
 pub mod syntax;

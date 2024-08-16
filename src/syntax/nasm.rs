@@ -386,7 +386,7 @@ impl<'src> NASM<'src> {
             self.expect(NASMTokenType::Global)?.value.to_string();
             let label = self.expect(NASMTokenType::Symbol)?.value.to_string();
             self.expect_newline()?;
-            self.asm.globals.push(label);
+            self.asm.globals.insert(label);
             Ok(())
         }
 

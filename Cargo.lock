@@ -45,6 +45,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "argh",
+ "inform",
+ "linked-hash-map",
  "logos",
  "paste",
  "serde",
@@ -88,10 +90,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "inform"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd88519deb5e1cf562ef7b4646ac39268f7952170988d7333aa938285e748423"
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
+
+[[package]]
+name = "linked-hash-map"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "logos"
